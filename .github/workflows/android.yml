@@ -35,6 +35,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Fix Gradle Wrapper
+        run: |
+          cd android
+          echo "Before fix:"
+          ls -la gradle/wrapper/
+          gradle wrapper --gradle-version 8.14.3
+          echo "After fix:"
+          ls -la gradle/wrapper/
+          chmod +x gradlew
+
       - name: Sync Capacitor
         run: npx cap sync android
 
