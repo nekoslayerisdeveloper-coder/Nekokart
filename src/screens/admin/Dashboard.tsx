@@ -2,31 +2,57 @@ import React, { useEffect, useState } from 'react';
 import { useStore } from '../../StoreContext';
 import { 
   Users, ShoppingBag, DollarSign, TrendingUp, 
-  BarChart3, Calendar, ArrowUpRight, ArrowDownRight 
+  BarChart3, Calendar, ArrowUpRight, ArrowDownRight, Loader2
 } from 'lucide-react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, LineChart, Line 
 } from 'recharts';
 import AdminLayout from './AdminLayout';
+import { db } from '../../lib/firebase';
+import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
 
 export default function AdminDashboard() {
-  const { token } = useStore();
+  const { user } = useStore();
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/admin/analytics', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(res => res.json())
-      .then(data => {
-        setStats(data);
-        setLoading(false);
-      });
-  }, [token]);
+    const fetchAnalytics = async () => {
+      try {
+        const [ordersSnap, usersSnap] = await Promise.all([
+          getDocs(collection(db, 'orders')),
+          getDocs(collection(db, 'users'))
+        ]);
 
-  if (loading) return <AdminLayout title="Dashboard"><div>Loading...</div></AdminLayout>;
+        const orders = ordersSnap.docs.map(d => d.data());
+        const totalRevenue = orders.reduce((acc, curr: any) => acc + (curr.total || 0), 0);
+        
+        // Mock chart data based on real count
+        const chartData = [
+          { date: 'Mon', revenue: totalRevenue * 0.1 },
+          { date: 'Tue', revenue: totalRevenue * 0.2 },
+          { date: 'Wed', revenue: totalRevenue * 0.15 },
+          { date: 'Thu', revenue: totalRevenue * 0.25 },
+          { date: 'Fri', revenue: totalRevenue * 0.3 },
+        ];
+
+        setStats({
+          totalRevenue,
+          totalOrders: ordersSnap.size,
+          totalUsers: usersSnap.size,
+          chartData
+        });
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAnalytics();
+  }, []);
+
+  if (loading) return <AdminLayout title="Dashboard"><div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-blue-600" /></div></AdminLayout>;
 
   const cards = [
     { title: 'Total Revenue', value: `₹${stats.totalRevenue.toLocaleString()}`, icon: DollarSign, color: 'blue', change: '+12.5%' },

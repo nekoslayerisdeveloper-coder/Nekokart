@@ -2,14 +2,17 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Mail, Lock, AlertCircle, Loader2 } from 'lucide-react';
 import { useStore } from '../StoreContext';
+import { auth } from '../lib/firebase';
+import { signInWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification } from 'firebase/auth';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   
-  const { login } = useStore();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from?.pathname || '/';
@@ -17,31 +20,64 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setMessage('');
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
+      const { user } = await signInWithEmailAndPassword(auth, email, password);
       
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await res.text();
-        console.error("Non-JSON response:", text);
-        throw new Error("Server is not responding correctly. This app requires a Node.js backend (server.ts) which may not be running on your host (e.g. Netlify static hosting).");
+      const isAdminEmail = email === 'nekoslayer20@gmail.com' || email === 'admin@gmail.com';
+      
+      // Check if email is verified (Bypass for admins or if verified)
+      if (!user.emailVerified && !isAdminEmail) {
+        setError('Please verify your email address to access your account.');
+        setLoading(false);
+        return;
       }
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Login failed');
-
-      login(data.token, data.user);
       navigate(from, { replace: true });
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('Invalid email or password. Please try again.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Too many failed attempts. Please try again later.');
+      } else {
+        setError(err.message);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Please enter your email address first.');
+      return;
+    }
+    setError('');
+    setMessage('');
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setMessage('Password reset link sent! Please check your spam folder if you don\'t see it.');
+    } catch (err: any) {
+      if (err.code === 'auth/user-not-found') {
+        setError('No account found with this email.');
+      } else {
+        setError(err.message);
+      }
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (!auth.currentUser) return;
+    setResending(true);
+    try {
+      await sendEmailVerification(auth.currentUser);
+      setMessage('Verification email resent! Please check your inbox.');
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      setResending(false);
     }
   };
 
@@ -55,9 +91,27 @@ export default function Login() {
         <div className="p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-50 text-red-600 p-3 rounded-lg flex items-start gap-2 text-sm border border-red-100">
-                <AlertCircle size={18} className="shrink-0" />
-                <p>{error}</p>
+              <div className="bg-red-50 text-red-600 p-3 rounded-lg flex flex-col gap-2 text-sm border border-red-100">
+                <div className="flex items-start gap-2">
+                  <AlertCircle size={18} className="shrink-0" />
+                  <p>{error}</p>
+                </div>
+                {error.includes('verify your email') && (
+                  <button 
+                    type="button"
+                    onClick={handleResendVerification}
+                    disabled={resending}
+                    className="text-blue-600 font-bold hover:underline self-start mt-1 text-xs px-7"
+                  >
+                    {resending ? 'Sending...' : 'Resend Verification Email'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {message && (
+              <div className="bg-green-50 text-green-600 p-3 rounded-lg flex items-start gap-2 text-sm border border-green-100">
+                <p>{message}</p>
               </div>
             )}
             
@@ -90,7 +144,7 @@ export default function Login() {
                 />
               </div>
               <div className="flex justify-end">
-                <button type="button" className="text-xs font-bold text-blue-600 hover:underline">Forgot?</button>
+                <button type="button" onClick={handleForgotPassword} className="text-xs font-bold text-blue-600 hover:underline">Forgot?</button>
               </div>
             </div>
 

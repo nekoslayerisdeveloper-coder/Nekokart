@@ -3,6 +3,9 @@ import { Plus, Trash2, Image as ImageIcon, Loader2, Search, X } from 'lucide-rea
 import { Category } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
 import AdminLayout from './AdminLayout';
+import { db, storage } from '../../lib/firebase';
+import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export default function AdminCategories() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -16,37 +19,23 @@ export default function AdminCategories() {
   });
 
   useEffect(() => {
-    fetchCategories();
-  }, []);
-
-  const fetchCategories = async () => {
-    try {
-      const res = await fetch('/api/categories');
-      const data = await res.json();
-      setCategories(data);
-    } catch (error) {
-      console.error('Failed to fetch categories:', error);
-    } finally {
+    const unsubscribe = onSnapshot(collection(db, 'categories'), (snap) => {
+      setCategories(snap.docs.map(d => ({ id: d.id, ...d.data() } as Category)));
       setLoading(false);
-    }
-  };
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploading(true);
-    const formData = new FormData();
-    formData.append('image', file);
-
     try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-        body: formData
-      });
-      const data = await res.json();
-      setNewCat({ ...newCat, image: data.url });
+      const fileRef = ref(storage, `categories/${Date.now()}-${file.name}`);
+      const uploadSnap = await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(uploadSnap.ref);
+      setNewCat({ ...newCat, image: url });
     } catch (error) {
       console.error('Upload failed:', error);
     } finally {
@@ -57,19 +46,10 @@ export default function AdminCategories() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/admin/categories', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(newCat)
-      });
-      if (res.ok) {
-        fetchCategories();
-        setIsModalOpen(false);
-        setNewCat({ name: '', image: '' });
-      }
+      const catRef = doc(collection(db, 'categories'));
+      await setDoc(catRef, { ...newCat, id: catRef.id });
+      setIsModalOpen(false);
+      setNewCat({ name: '', image: '' });
     } catch (error) {
       console.error('Failed to add category:', error);
     }
@@ -78,13 +58,7 @@ export default function AdminCategories() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this category?')) return;
     try {
-      const res = await fetch(`/api/admin/categories/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (res.ok) {
-        setCategories(categories.filter(c => c.id !== id));
-      }
+      await deleteDoc(doc(db, 'categories', id));
     } catch (error) {
       console.error('Failed to delete category:', error);
     }

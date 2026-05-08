@@ -4,38 +4,28 @@ import { Order } from '../../types';
 import { Eye, Package, CheckCircle2, Clock, XCircle, Search, Truck, X, User as UserIcon, Phone, MapPin } from 'lucide-react';
 import AdminLayout from './AdminLayout';
 import { motion, AnimatePresence } from 'motion/react';
+import { db } from '../../lib/firebase';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 
 export default function AdminOrders() {
-  const { token } = useStore();
+  const { user } = useStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   useEffect(() => {
-    fetchOrders();
+    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() } as Order)));
+      setLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
-  const fetchOrders = () => {
-    fetch('/api/orders', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(res => res.json())
-      .then(data => {
-        setOrders(data.reverse());
-        setLoading(false);
-      });
-  };
-
   const updateStatus = async (id: string, status: string) => {
-    const res = await fetch(`/api/admin/orders/${id}/status`, {
-      method: 'PATCH',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ status })
-    });
-    if (res.ok) fetchOrders();
+    try {
+      await updateDoc(doc(db, 'orders', id), { status });
+    } catch (err) { alert('Failed to update status'); }
   };
 
   const getStatusColor = (status: string) => {

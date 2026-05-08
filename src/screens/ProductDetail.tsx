@@ -4,6 +4,8 @@ import { ShoppingCart, Zap, Heart, Star, ShieldCheck, RotateCcw, Truck, MapPin }
 import { Product } from '../types';
 import { useStore } from '../StoreContext';
 import { motion } from 'motion/react';
+import { db } from '../lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -13,13 +15,22 @@ export default function ProductDetail() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
-    fetch(`/api/products/${id}`)
-      .then(res => res.json())
-      .then(data => {
-        setProduct(data);
+    const fetchProduct = async () => {
+      if (!id) return;
+      setLoading(true);
+      try {
+        const docRef = doc(db, 'products', id);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          setProduct({ id: snap.id, ...snap.data() } as Product);
+        }
+      } catch (err) {
+        console.error('Failed to fetch product', err);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+    fetchProduct();
   }, [id]);
 
   if (loading || !product) {

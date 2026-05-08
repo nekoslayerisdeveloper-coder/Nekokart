@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../StoreContext';
 import { User as UserIcon, Phone, MapPin, Save, AlertCircle, Loader2, Lock } from 'lucide-react';
 import UserLayout from '../components/UserLayout';
+import { db, auth } from '../lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 
 export default function Profile() {
-  const { token, user, login } = useStore();
+  const { user } = useStore();
   const [profile, setProfile] = useState({
     name: '',
     phone: '',
@@ -21,38 +24,34 @@ export default function Profile() {
   const [pwMessage, setPwMessage] = useState('');
 
   useEffect(() => {
-    fetch('/api/auth/profile', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(res => res.json())
-      .then(data => {
-        setProfile({
-          name: data.name || '',
-          phone: data.phone || '',
-          address: data.address || ''
-        });
-        setLoading(false);
-      });
-  }, [token]);
+    if (!user) return;
+    const fetchProfile = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'users', user.id));
+        if (snap.exists()) {
+          const data = snap.data();
+          setProfile({
+            name: data.name || '',
+            phone: data.phone || '',
+            address: data.address || ''
+          });
+        }
+      } catch (err) { console.error(err); }
+      finally { setLoading(false); }
+    };
+    fetchProfile();
+  }, [user]);
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     setSaving(true);
     setMessage('');
     try {
-      const res = await fetch('/api/auth/profile', {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(profile)
-      });
-      const data = await res.json();
-      if (res.ok) {
-        login(token!, data);
-        setMessage('Profile updated successfully!');
-      }
+      await setDoc(doc(db, 'users', user.id), {
+        ...profile
+      }, { merge: true });
+      setMessage('Profile updated successfully!');
     } catch (err) {
       setMessage('Update failed');
     } finally {
@@ -62,31 +61,20 @@ export default function Profile() {
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!auth.currentUser) return;
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       return setPwMessage('Passwords do not match');
     }
     setPwMessage('');
     try {
-      const res = await fetch('/api/auth/change-password', {
-        method: 'PUT',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          oldPassword: passwordData.oldPassword,
-          newPassword: passwordData.newPassword
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setPwMessage('Password updated successfully!');
-        setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
-      } else {
-        setPwMessage(data.message);
-      }
-    } catch (err) {
-      setPwMessage('Update failed');
+      // Re-authenticate first
+      const credential = EmailAuthProvider.credential(auth.currentUser.email!, passwordData.oldPassword);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+      await updatePassword(auth.currentUser, passwordData.newPassword);
+      setPwMessage('Password updated successfully!');
+      setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (err: any) {
+      setPwMessage(err.message || 'Update failed');
     }
   };
 

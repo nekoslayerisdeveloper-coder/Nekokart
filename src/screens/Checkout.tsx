@@ -3,9 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { MapPin, CreditCard, Truck, CheckCircle2, Loader2, IndianRupee, ShieldCheck, User as UserIcon } from 'lucide-react';
 import { useStore } from '../StoreContext';
 import { motion, AnimatePresence } from 'motion/react';
+import { db, storage } from '../lib/firebase';
+import { doc, getDoc, collection, setDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export default function Checkout() {
-  const { cart, token, clearCart } = useStore();
+  const { cart, user, clearCart } = useStore();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -27,35 +30,33 @@ export default function Checkout() {
   const total = subtotal + deliveryCharge;
 
   React.useEffect(() => {
-    fetch('/api/settings')
-      .then(res => res.json())
-      .then(data => setAdminSettings(data))
-      .catch(err => console.error('Failed to fetch settings', err));
+    const fetchSettings = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'settings', 'general'));
+        if (snap.exists()) setAdminSettings(snap.data() as typeof adminSettings);
+      } catch (err) {
+        console.error('Failed to fetch settings', err);
+      }
+    };
+    fetchSettings();
   }, []);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'home' | 'user' | 'payment') => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !user) return;
 
     if (type !== 'payment') setUploading(type);
-    else setLoading(true); // Using loading state for payment screenshot
-
-    const formData = new FormData();
-    formData.append('image', file);
+    else setLoading(true);
 
     try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
-      const data = await res.json();
-      if (res.ok) {
-        if (type === 'payment') {
-          setPaymentScreenshot(data.url);
-        } else {
-          setShippingDetails(prev => ({ ...prev, [type === 'home' ? 'homePhoto' : 'userPhoto']: data.url }));
-        }
+      const fileRef = ref(storage, `uploads/${user.id}/${Date.now()}-${file.name}`);
+      const uploadSnap = await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(uploadSnap.ref);
+
+      if (type === 'payment') {
+        setPaymentScreenshot(url);
+      } else {
+        setShippingDetails(prev => ({ ...prev, [type === 'home' ? 'homePhoto' : 'userPhoto']: url }));
       }
     } catch (err) {
       alert('Upload failed');
@@ -67,6 +68,7 @@ export default function Checkout() {
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return navigate('/login');
     if (!shippingDetails.fullName || !shippingDetails.phone || !shippingDetails.address || !shippingDetails.pincode) {
       return alert('Please fill in all shipping details including Pincode');
     }
@@ -77,7 +79,10 @@ export default function Checkout() {
     
     setLoading(true);
     try {
+      const orderId = "ORD-" + Math.random().toString(36).substring(2, 9).toUpperCase();
       const orderData = {
+        id: orderId,
+        userId: user.id,
         items: cart.map(item => ({
           productId: item.id,
           name: item.name,
@@ -88,24 +93,18 @@ export default function Checkout() {
         total,
         paymentMethod,
         paymentScreenshot: paymentMethod === 'Online' ? paymentScreenshot : null,
-        shippingDetails
+        shippingDetails,
+        status: 'Processing',
+        createdAt: new Date().toISOString(), // rules will check this or we use serverTimestamp() if structure supports
       };
 
-      const res = await fetch('/api/orders', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(orderData)
-      });
-
-      if (!res.ok) throw new Error('Order placement failed');
+      await setDoc(doc(db, 'orders', orderId), orderData);
       
       setSuccess(true);
       clearCart();
       setTimeout(() => navigate('/orders'), 3000);
     } catch (err) {
+      console.error(err);
       alert('Something went wrong. Please try again.');
     } finally {
       setLoading(false);

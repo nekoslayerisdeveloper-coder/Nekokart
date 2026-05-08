@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, AlertCircle, Loader2 } from 'lucide-react';
 import { useStore } from '../StoreContext';
+import { auth, db } from '../lib/firebase';
+import { createUserWithEmailAndPassword, updateProfile, sendEmailVerification } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 
 export default function Signup() {
   const [email, setEmail] = useState('');
@@ -9,8 +12,8 @@ export default function Signup() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
   
-  const { login } = useStore();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -19,30 +22,42 @@ export default function Signup() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, name })
-      });
+      const { user } = await createUserWithEmailAndPassword(auth, email, password);
+      await updateProfile(user, { displayName: name });
       
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await res.text();
-        console.error("Non-JSON response:", text);
-        throw new Error("Server is not responding correctly. This app requires a Node.js backend (server.ts) which may not be running on your host (e.g. Netlify static hosting).");
-      }
+      // Create user profile in Firestore
+      await setDoc(doc(db, 'users', user.uid), {
+        id: user.uid,
+        email,
+        name,
+        role: 'user',
+        createdAt: new Date().toISOString()
+      });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || 'Signup failed');
-
-      login(data.token, data.user);
-      navigate('/');
+      // Send verification email
+      await sendEmailVerification(user);
+      setSuccess(true);
+      setTimeout(() => navigate('/login'), 5000);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
+
+  if (success) {
+    return (
+      <div className="max-w-md mx-auto mt-10 p-8 bg-white rounded-xl shadow-lg text-center border border-green-100">
+        <div className="bg-green-100 text-green-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Mail size={32} />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-800">Verify your email!</h2>
+        <p className="text-gray-600 mt-4">We've sent a verification link to <span className="font-bold">{email}</span>. Please click it to activate your account.</p>
+        <p className="text-sm text-gray-400 mt-6 italic">Redirecting to login in 5 seconds...</p>
+        <Link to="/login" className="mt-4 inline-block text-blue-600 font-bold hover:underline">Go to Login now</Link>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-md mx-auto mt-10">

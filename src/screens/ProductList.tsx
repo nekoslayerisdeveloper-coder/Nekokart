@@ -3,6 +3,8 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { Filter, SlidersHorizontal, Star } from 'lucide-react';
 import { Product } from '../types';
 import { useStore } from '../StoreContext';
+import { db } from '../lib/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export default function ProductList() {
   const [searchParams] = useSearchParams();
@@ -15,24 +17,33 @@ export default function ProductList() {
   const search = searchParams.get('search');
 
   useEffect(() => {
-    setLoading(true);
-    const query = new URLSearchParams();
-    if (category) query.append('category', category);
-    if (search) query.append('search', search);
-
-    fetch(`/api/products?${query.toString()}`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch products');
-        return res.json();
-      })
-      .then(data => {
+    const fetchProducts = async () => {
+      setLoading(true);
+      try {
+        let q = query(collection(db, 'products'));
+        if (category) {
+          q = query(collection(db, 'products'), where('category', '==', category));
+        }
+        
+        const snap = await getDocs(q);
+        let data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+        
+        if (search) {
+          const s = search.toLowerCase();
+          data = data.filter(p => 
+            p.name.toLowerCase().includes(s) || 
+            p.description?.toLowerCase().includes(s)
+          );
+        }
+        
         setProducts(data);
-        setLoading(false);
-      })
-      .catch(err => {
+      } catch (err: any) {
         setError(err.message);
+      } finally {
         setLoading(false);
-      });
+      }
+    };
+    fetchProducts();
   }, [category, search]);
 
   if (loading) return (

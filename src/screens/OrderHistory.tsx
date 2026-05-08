@@ -4,9 +4,11 @@ import { Package, Truck, ChevronRight, Search, Clock, X, MapPin, Phone, User as 
 import { Order } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import UserLayout from '../components/UserLayout';
+import { db } from '../lib/firebase';
+import { collection, query, where, orderBy, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 
 export default function OrderHistory() {
-  const { token } = useStore();
+  const { user } = useStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -14,64 +16,38 @@ export default function OrderHistory() {
   const [editDetails, setEditDetails] = useState({ fullName: '', phone: '', address: '', pincode: '' });
 
   useEffect(() => {
-    fetch('/api/orders', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(res => res.json())
-      .then(data => {
-        setOrders(data.reverse());
-        setLoading(false);
-      });
-  }, [token]);
+    if (!user) return;
+    const q = query(
+      collection(db, 'orders'), 
+      where('userId', '==', user.id),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() } as Order)));
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   const handleCancelOrder = async (orderId: string) => {
     if (!confirm('Are you sure you want to cancel this order?')) return;
     try {
-      const res = await fetch(`/api/orders/${orderId}/cancel`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        setOrders(orders.map(o => o.id === orderId ? { ...o, status: 'Cancelled' } : o));
-        setSelectedOrder(prev => prev?.id === orderId ? { ...prev, status: 'Cancelled' } : prev);
-      } else {
-        const data = await res.json();
-        alert(data.message);
-      }
+      await updateDoc(doc(db, 'orders', orderId), { status: 'Cancelled' });
     } catch (err) { alert('Action failed'); }
   };
 
   const handleReturnOrder = async (orderId: string) => {
     if (!confirm('Do you want to initiate a return?')) return;
     try {
-      const res = await fetch(`/api/orders/${orderId}/return`, {
-        method: 'PATCH',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        setOrders(orders.map(o => o.id === orderId ? { ...o, status: 'Returned' } : o));
-        setSelectedOrder(prev => prev?.id === orderId ? { ...prev, status: 'Returned' } : prev);
-      }
+      await updateDoc(doc(db, 'orders', orderId), { status: 'Returned' });
     } catch (err) { alert('Action failed'); }
   };
 
   const handleSaveEdit = async () => {
     if (!selectedOrder) return;
     try {
-      const res = await fetch(`/api/orders/${selectedOrder.id}/edit`, {
-        method: 'PATCH',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(editDetails)
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setOrders(orders.map(o => o.id === updated.id ? updated : o));
-        setSelectedOrder(updated);
-        setIsEditing(false);
-      }
+      await updateDoc(doc(db, 'orders', selectedOrder.id), { shippingDetails: { ...selectedOrder.shippingDetails, ...editDetails } });
+      setIsEditing(false);
     } catch (err) { alert('Update failed'); }
   };
 

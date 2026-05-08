@@ -1,48 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { QrCode, Save, Loader2, Link, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { useStore } from '../../StoreContext';
+import { db, storage } from '../../lib/firebase';
+import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export default function AdminPaymentSettings() {
-  const { token } = useStore();
-  const [loading, setLoading] = useState(false);
+  const { user } = useStore();
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({ adminQR: '', upiId: '' });
 
   useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  const fetchSettings = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/settings');
-      const data = await res.json();
-      setSettings(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
+    const unsubscribe = onSnapshot(doc(db, 'settings', 'general'), (snap) => {
+      if (snap.exists()) setSettings(snap.data() as typeof settings);
       setLoading(false);
-    }
-  };
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleQRUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setSaving(true);
-    const formData = new FormData();
-    formData.append('image', file);
-
     try {
-       const res = await fetch('/api/upload', {
-         method: 'POST',
-         headers: { 'Authorization': `Bearer ${token}` },
-         body: formData
-       });
-       const data = await res.json();
-       if (res.ok) {
-         setSettings(prev => ({ ...prev, adminQR: data.url }));
-       }
+       const fileRef = ref(storage, `admin/qr-${Date.now()}-${file.name}`);
+       const uploadSnap = await uploadBytes(fileRef, file);
+       const url = await getDownloadURL(uploadSnap.ref);
+       setSettings(prev => ({ ...prev, adminQR: url }));
     } catch (err) {
       alert('QR Upload failed');
     } finally {
@@ -53,17 +39,8 @@ export default function AdminPaymentSettings() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/settings', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(settings)
-      });
-      if (res.ok) {
-        alert('Settings saved successfully!');
-      }
+      await setDoc(doc(db, 'settings', 'general'), settings);
+      alert('Settings saved successfully!');
     } catch (err) {
       alert('Failed to save settings');
     } finally {

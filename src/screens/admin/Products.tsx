@@ -4,9 +4,12 @@ import { Product, Category } from '../../types';
 import { Plus, Edit2, Trash2, Search, ExternalLink, Loader2 } from 'lucide-react';
 import AdminLayout from './AdminLayout';
 import { motion, AnimatePresence } from 'motion/react';
+import { db, storage } from '../../lib/firebase';
+import { collection, getDocs, doc, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export default function AdminProducts() {
-  const { token } = useStore();
+  const { user } = useStore();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,28 +21,27 @@ export default function AdminProducts() {
     fetchCategories();
   }, []);
 
-  const fetchProducts = () => {
-    fetch('/api/products')
-      .then(res => res.json())
-      .then(data => {
-        setProducts(data);
-        setLoading(false);
-      });
+  const fetchProducts = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'products'));
+      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Product)));
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
   };
 
-  const fetchCategories = () => {
-    fetch('/api/categories')
-      .then(res => res.json())
-      .then(data => setCategories(data));
+  const fetchCategories = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'categories'));
+      setCategories(snap.docs.map(d => ({ id: d.id, ...d.data() } as Category)));
+    } catch (err) { console.error(err); }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this product?')) return;
-    const res = await fetch(`/api/admin/products/${id}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (res.ok) fetchProducts();
+    try {
+      await deleteDoc(doc(db, 'products', id));
+      fetchProducts();
+    } catch (err) { alert('Delete failed'); }
   };
 
   const [uploading, setUploading] = useState(false);
@@ -48,39 +50,28 @@ export default function AdminProducts() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    const formData = new FormData();
-    formData.append('image', file);
     try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
-      const data = await res.json();
-      if (res.ok) setEditingProduct(prev => ({ ...prev!, image: data.url }));
+      const fileRef = ref(storage, `products/${Date.now()}-${file.name}`);
+      const uploadSnap = await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(uploadSnap.ref);
+      setEditingProduct(prev => ({ ...prev!, image: url }));
     } catch (err) { alert('Upload failed'); }
     finally { setUploading(false); }
   };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    const url = editingProduct?.id 
-      ? `/api/admin/products/${editingProduct.id}` 
-      : '/api/admin/products';
-    const method = editingProduct?.id ? 'PUT' : 'POST';
-
-    const res = await fetch(url, {
-      method,
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(editingProduct)
-    });
-
-    if (res.ok) {
+    try {
+      if (editingProduct?.id) {
+        await setDoc(doc(db, 'products', editingProduct.id), editingProduct);
+      } else {
+        const productRef = doc(collection(db, 'products'));
+        await setDoc(productRef, { ...editingProduct, id: productRef.id });
+      }
       setIsModalOpen(false);
       fetchProducts();
+    } catch (err) {
+      alert('Failed to save product');
     }
   };
 

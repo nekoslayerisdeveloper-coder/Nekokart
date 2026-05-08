@@ -4,44 +4,46 @@ import { MessageSquare, Send, Clock, CheckCircle, HelpCircle, Loader2 } from 'lu
 import { SupportTicket } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import UserLayout from '../components/UserLayout';
+import { db } from '../lib/firebase';
+import { collection, query, where, orderBy, onSnapshot, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function Support() {
-  const { token, user } = useStore();
+  const { user } = useStore();
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [newTicket, setNewTicket] = useState({ subject: '', message: '' });
 
   useEffect(() => {
-    fetchTickets();
-  }, [token]);
-
-  const fetchTickets = () => {
-    fetch('/api/tickets', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    })
-      .then(res => res.json())
-      .then(data => {
-        setTickets(data.reverse());
-        setLoading(false);
-      });
-  };
+    if (!user) return;
+    const q = query(
+      collection(db, 'tickets'),
+      where('userId', '==', user.id),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setTickets(snap.docs.map(d => ({ id: d.id, ...d.data() } as SupportTicket)));
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch('/api/tickets', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(newTicket)
-    });
-    if (res.ok) {
+    if (!user) return;
+    try {
+      const ticketRef = doc(collection(db, 'tickets'));
+      await setDoc(ticketRef, {
+        ...newTicket,
+        id: ticketRef.id,
+        userId: user.id,
+        userName: user.name,
+        status: 'Open',
+        createdAt: serverTimestamp()
+      });
       setShowNew(false);
       setNewTicket({ subject: '', message: '' });
-      fetchTickets();
-    }
+    } catch (err) { alert('Failed to create ticket'); }
   };
 
   if (loading) return <div className="p-8 text-center"><Loader2 className="animate-spin mx-auto" /></div>;

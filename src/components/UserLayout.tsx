@@ -13,6 +13,10 @@ export default function UserLayout({ children, title }: { children: React.ReactN
     { label: 'Support Tickets', icon: HelpCircle, path: '/support' },
   ];
 
+  if (user?.role === 'admin') {
+    menuItems.push({ label: 'Admin Panel', icon: ShieldCheck, path: '/admin' });
+  }
+
   return (
     <div className="flex flex-col md:flex-row gap-8">
       {/* Sidebar */}

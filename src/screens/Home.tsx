@@ -3,19 +3,27 @@ import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ChevronRight, Zap, ShieldCheck, Truck, RotateCcw } from 'lucide-react';
 import { Product, Category } from '../types';
+import { db } from '../lib/firebase';
+import { collection, query, limit, getDocs } from 'firebase/firestore';
 
 export default function Home() {
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
 
   useEffect(() => {
-    fetch('/api/products')
-      .then(res => res.json())
-      .then(data => setFeaturedProducts(data.slice(0, 4)));
+    const fetchData = async () => {
+      try {
+        const prodQuery = query(collection(db, 'products'), limit(4));
+        const prodSnap = await getDocs(prodQuery);
+        setFeaturedProducts(prodSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)));
 
-    fetch('/api/categories')
-      .then(res => res.json())
-      .then(data => setCategories(data));
+        const catSnap = await getDocs(collection(db, 'categories'));
+        setCategories(catSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Category)));
+      } catch (err) {
+        console.error('Failed to fetch data', err);
+      }
+    };
+    fetchData();
   }, []);
 
   const features = [

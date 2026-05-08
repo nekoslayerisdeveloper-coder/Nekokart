@@ -1,13 +1,16 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, Product, CartItem, Order } from './types';
+import { User, Product, CartItem } from './types';
+import { auth, db } from './lib/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface StoreContextType {
   user: User | null;
-  token: string | null;
+  loading: boolean;
   cart: CartItem[];
   wishlist: Product[];
-  login: (token: string, user: User) => void;
-  logout: () => void;
+  setUser: (user: User | null) => void;
+  logout: () => Promise<void>;
   addToCart: (product: Product) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
@@ -20,47 +23,63 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [wishlist, setWishlist] = useState<Product[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem('token');
-    const savedUser = localStorage.getItem('user');
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true);
+      if (firebaseUser) {
+        // Fetch extra profile data from Firestore
+        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
+          // Force admin role for owner or explicit admin emails
+          if (firebaseUser.email === 'nekoslayer20@gmail.com' || firebaseUser.email === 'admin@gmail.com') {
+            userData.role = 'admin';
+          }
+          setUser({ 
+            id: firebaseUser.uid, 
+            ...userData,
+            emailVerified: firebaseUser.emailVerified 
+          } as User);
+        } else {
+          // If no doc yet, set basic info
+          const isAdminEmail = firebaseUser.email === 'nekoslayer20@gmail.com' || firebaseUser.email === 'admin@gmail.com';
+          setUser({ 
+            id: firebaseUser.uid, 
+            email: firebaseUser.email || '', 
+            name: firebaseUser.displayName || 'User',
+            role: isAdminEmail ? 'admin' : 'user',
+            emailVerified: firebaseUser.emailVerified
+          } as User);
+        }
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
     const savedCart = localStorage.getItem('cart');
     const savedWishlist = localStorage.getItem('wishlist');
-
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
-    }
     if (savedCart) setCart(JSON.parse(savedCart));
     if (savedWishlist) setWishlist(JSON.parse(savedWishlist));
     
     setIsInitialized(true);
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
     if (isInitialized) {
-      if (token) localStorage.setItem('token', token);
-      else localStorage.removeItem('token');
-      
-      if (user) localStorage.setItem('user', JSON.stringify(user));
-      else localStorage.removeItem('user');
-
       localStorage.setItem('cart', JSON.stringify(cart));
       localStorage.setItem('wishlist', JSON.stringify(wishlist));
     }
-  }, [user, token, cart, wishlist, isInitialized]);
+  }, [user, cart, wishlist, isInitialized]);
 
-  const login = (token: string, user: User) => {
-    setToken(token);
-    setUser(user);
-  };
-
-  const logout = () => {
-    setToken(null);
+  const logout = async () => {
+    await signOut(auth);
     setUser(null);
   };
 
@@ -104,11 +123,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   return (
     <StoreContext.Provider value={{
-      user, token, cart, wishlist,
-      login, logout, addToCart, removeFromCart, updateQuantity, clearCart,
+      user, loading, cart, wishlist,
+      setUser, logout, addToCart, removeFromCart, updateQuantity, clearCart,
       toggleWishlist, isInWishlist
     }}>
-      {children}
+      {!loading && children}
     </StoreContext.Provider>
   );
 };
