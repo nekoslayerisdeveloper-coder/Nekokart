@@ -14,13 +14,14 @@ const JWT_SECRET = process.env.JWT_SECRET || "neko-kart-secret-key-123";
 const DATA_FILE = path.join(process.cwd(), "db.json");
 const UPLOADS_DIR = path.join(process.cwd(), "public", "uploads");
 
-if (!fs.existsSync(UPLOADS_DIR)) {
+if (!process.env.VERCEL && !process.env.NETLIFY && !fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
 function getData() {
   if (!fs.existsSync(DATA_FILE)) {
-     const initialData = {
+    // Return initial data instead of writing to disk if on serverless (fails anyway)
+    const initialData = {
       users: [{
         id: "admin-id",
         email: "neko@gmail.com",
@@ -43,13 +44,19 @@ function getData() {
       ],
       coupons: []
     };
-    fs.writeFileSync(DATA_FILE, JSON.stringify(initialData, null, 2));
+    if (!process.env.VERCEL && !process.env.NETLIFY) {
+      fs.writeFileSync(DATA_FILE, JSON.stringify(initialData, null, 2));
+    }
     return initialData;
   }
   return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
 }
 
 function saveData(data: any) {
+  if (process.env.VERCEL || process.env.NETLIFY) {
+    console.warn("Disk writing is not supported on serverless platforms. Use a database like Firebase.");
+    return;
+  }
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
@@ -67,6 +74,10 @@ const PORT = 3000;
 
 app.use(express.json());
 app.use("/uploads", express.static(UPLOADS_DIR));
+
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", time: new Date().toISOString(), platform: process.env.VERCEL ? 'Vercel' : (process.env.NETLIFY ? 'Netlify' : 'Local') });
+});
 
 const authenticateToken = (req: any, res: any, next: any) => {
   const authHeader = req.headers['authorization'];

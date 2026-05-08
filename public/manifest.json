@@ -3,13 +3,16 @@
   "short_name": "NekoKart",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "background_color": "#2563eb",
+  "theme_color": "#2563eb",
+  "description": "Premium E-commerce store for electronics, fashion and more.",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "https://cdn-icons-png.flaticon.com/512/3081/3081840.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
