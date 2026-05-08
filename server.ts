@@ -62,35 +62,38 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+export const app = express();
+const PORT = 3000;
 
-  app.use(express.json());
-  app.use("/uploads", express.static(UPLOADS_DIR));
+app.use(express.json());
+app.use("/uploads", express.static(UPLOADS_DIR));
 
-  const authenticateToken = (req: any, res: any, next: any) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ message: "Unauthorized" });
-    jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-      if (err) return res.status(403).json({ message: "Forbidden" });
-      req.user = user;
-      next();
-    });
-  };
-
-  const isAdmin = (req: any, res: any, next: any) => {
-    if (req.user.role !== 'admin') return res.status(403).json({ message: "Admin access required" });
+const authenticateToken = (req: any, res: any, next: any) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ message: "Unauthorized" });
+  jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
+    if (err) return res.status(403).json({ message: "Forbidden" });
+    req.user = user;
     next();
-  };
-
-  app.post("/api/upload", authenticateToken, upload.single("image"), (req: any, res) => {
-    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-    res.json({ url: `/uploads/${req.file.filename}` });
   });
+};
 
-  app.post("/api/auth/signup", async (req, res) => {
+const isAdmin = (req: any, res: any, next: any) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ message: "Admin access required" });
+  next();
+};
+
+app.post("/api/upload", authenticateToken, upload.single("image"), (req: any, res) => {
+  if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+  res.json({ url: `/uploads/${req.file.filename}` });
+});
+
+// ... (rest of the routes stay the same, but use 'app.' directly)
+// Note: I will keep the routes but move them out of startServer
+
+// Routes
+app.post("/api/auth/signup", async (req, res) => {
     const { email, password, name } = req.body;
     const db = getData();
     if (db.users.find((u: any) => u.email === email)) return res.status(400).json({ message: "User already exists" });
@@ -167,7 +170,13 @@ async function startServer() {
     const { category, search } = req.query;
     let products = getData().products;
     if (category) products = products.filter((p: any) => p.category === category);
-    if (search) products = products.filter((p: any) => p.name.toLowerCase().includes((search as string).toLowerCase()));
+    if (search) {
+      const searchStr = (search as string).toLowerCase();
+      products = products.filter((p: any) => 
+        (p.name?.toLowerCase() || '').includes(searchStr) || 
+        (p.description?.toLowerCase() || '').includes(searchStr)
+      );
+    }
     res.json(products);
   });
 
@@ -272,16 +281,15 @@ async function startServer() {
     res.json({ message: "Deleted" });
   });
 
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
-    app.use(vite.middlewares);
-  } else {
-    const dist = path.join(process.cwd(), "dist");
-    app.use(express.static(dist));
-    app.get("*", (req, res) => res.sendFile(path.join(dist, "index.html")));
-  }
-
-  app.listen(PORT, "0.0.0.0", () => console.log(`Server at ${PORT}`));
+if (process.env.NODE_ENV !== "production" && !process.env.VERCEL && !process.env.NETLIFY) {
+  const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
+  app.use(vite.middlewares);
+} else if (!process.env.VERCEL && !process.env.NETLIFY) {
+  const dist = path.join(process.cwd(), "dist");
+  app.use(express.static(dist));
+  app.get("*", (req, res) => res.sendFile(path.join(dist, "index.html")));
 }
 
-startServer();
+if (!process.env.VERCEL && !process.env.NETLIFY && import.meta.url === `file://${process.argv[1]}`) {
+  app.listen(PORT, "0.0.0.0", () => console.log(`Server at ${PORT}`));
+}

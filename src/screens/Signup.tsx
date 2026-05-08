@@ -25,6 +25,13 @@ export default function Signup() {
         body: JSON.stringify({ email, password, name })
       });
       
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        console.error("Non-JSON response:", text);
+        throw new Error("Server is not responding correctly. This app requires a Node.js backend (server.ts) which may not be running on your host (e.g. Netlify static hosting).");
+      }
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Signup failed');
 
