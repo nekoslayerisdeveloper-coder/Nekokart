@@ -19,16 +19,21 @@ jobs:
           node-version: 18
           cache: 'npm'
 
+      - name: Diagnostic Info
+        run: |
+          node -v
+          npm -v
+          ls -R
+
       - name: Install Dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build Web App
-        run: |
-          npm run build
+        run: npm run build -- --logLevel info
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           NODE_OPTIONS: "--max-old-space-size=4096"
-          CI: true
+          CI: false
 
       - name: Setup Java
         uses: actions/setup-java@v4
