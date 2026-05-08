@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Neko Kart</string>
+    <string name="title_activity_main">Neko Kart</string>
+    <string name="package_name">com.nekokart.app</string>
+    <string name="custom_url_scheme">com.nekokart.app</string>
+</resources>
