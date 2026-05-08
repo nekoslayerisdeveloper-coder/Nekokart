@@ -16,24 +16,28 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: 'npm'
 
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Diagnostic Info
+      - name: Clean and Install
         run: |
-          node -v
-          npm -v
-          ls -R
-          cat package.json
+          rm -rf node_modules package-lock.json
+          npm install
+          ls -la
 
       - name: Build Web App
-        run: npm run build
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -F
+          cat vite.config.ts
+          npx vite build --debug
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           NODE_OPTIONS: "--max-old-space-size=4096"
+          CI: false
+
+      - name: Check Build Output
+        run: ls -R dist || echo "Dist not found"
 
       - name: Setup Java
         uses: actions/setup-java@v4
