@@ -42,7 +42,11 @@ function getData() {
         { id: 'c4', name: "home", image: "https://images.unsplash.com/photo-1484101403633-562f891dc89a?w=400" },
         { id: 'c5', name: "beauty", image: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=400" }
       ],
-      coupons: []
+      coupons: [],
+      settings: {
+        adminQR: "",
+        upiId: "kailash@upi"
+      }
     };
     if (!process.env.VERCEL && !process.env.NETLIFY) {
       fs.writeFileSync(DATA_FILE, JSON.stringify(initialData, null, 2));
@@ -273,6 +277,18 @@ app.post("/api/auth/signup", async (req, res) => {
     const db = getData();
     const revenue = db.orders.reduce((s: number, o: any) => s + (o.status !== 'Cancelled' ? o.total : 0), 0);
     res.json({ totalRevenue: revenue, totalOrders: db.orders.length, totalUsers: db.users.length, chartData: [] });
+  });
+
+  app.get("/api/settings", (req, res) => {
+    const db = getData();
+    res.json(db.settings || { adminQR: "", upiId: "" });
+  });
+
+  app.patch("/api/admin/settings", authenticateToken, isAdmin, (req, res) => {
+    const db = getData();
+    db.settings = { ...(db.settings || {}), ...req.body };
+    saveData(db);
+    res.json(db.settings);
   });
 
   app.get("/api/categories", (req, res) => res.json(getData().categories));

@@ -58,6 +58,7 @@ export interface Order {
   total: number;
   status: 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
   paymentMethod: 'COD' | 'Online';
+  paymentScreenshot?: string;
   shippingDetails: ShippingDetails;
   createdAt: string;
 }

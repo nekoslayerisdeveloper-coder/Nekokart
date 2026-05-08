@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ShoppingBag, ListOrdered, Users, ArrowLeft, Layers } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, ListOrdered, Users, ArrowLeft, Layers, QrCode } from 'lucide-react';
 
 export default function AdminLayout({ children, title }: { children: React.ReactNode, title: string }) {
   const location = useLocation();
@@ -10,6 +10,7 @@ export default function AdminLayout({ children, title }: { children: React.React
     { label: 'Categories', icon: Layers, path: '/admin/categories' },
     { label: 'Products', icon: ShoppingBag, path: '/admin/products' },
     { label: 'Orders', icon: ListOrdered, path: '/admin/orders' },
+    { label: 'Payment QR', icon: QrCode, path: '/admin/payment' },
   ];
 
   return (

@@ -17,6 +17,7 @@ import AdminDashboard from './screens/admin/Dashboard';
 import AdminProducts from './screens/admin/Products';
 import AdminOrders from './screens/admin/Orders';
 import AdminCategories from './screens/admin/Categories';
+import AdminPaymentSettings from './screens/admin/PaymentSettings';
 
 const ProtectedRoute = ({ children, adminOnly = false }: { children: React.ReactNode, adminOnly?: boolean }) => {
   const { user } = useStore();
@@ -82,6 +83,11 @@ function AppRoutes() {
           <Route path="/admin/categories" element={
             <ProtectedRoute adminOnly>
               <AdminCategories />
+            </ProtectedRoute>
+          } />
+          <Route path="/admin/payment" element={
+            <ProtectedRoute adminOnly>
+              <AdminPaymentSettings />
             </ProtectedRoute>
           } />
         </Routes>

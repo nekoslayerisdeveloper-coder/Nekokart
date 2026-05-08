@@ -175,7 +175,7 @@ export default function AdminOrders() {
                 </div>
 
                 {/* Photos Section */}
-                {(selectedOrder.shippingDetails.homePhoto || selectedOrder.shippingDetails.userPhoto) && (
+                {(selectedOrder.shippingDetails.homePhoto || selectedOrder.shippingDetails.userPhoto || selectedOrder.paymentScreenshot) && (
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                       {selectedOrder.shippingDetails.homePhoto && (
                         <div className="space-y-2">
@@ -190,6 +190,14 @@ export default function AdminOrders() {
                            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Customer ID Photo</h4>
                            <div className="aspect-video bg-gray-100 rounded-xl overflow-hidden border">
                               <img src={selectedOrder.shippingDetails.userPhoto} className="w-full h-full object-cover" />
+                           </div>
+                        </div>
+                      )}
+                      {selectedOrder.paymentScreenshot && (
+                        <div className="space-y-2 md:col-span-2">
+                           <h4 className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Payment Proof (Online Screenshot)</h4>
+                           <div className="bg-blue-50 p-2 rounded-xl border border-blue-100 overflow-hidden">
+                              <img src={selectedOrder.paymentScreenshot} className="w-full max-h-96 object-contain rounded-lg shadow-sm" />
                            </div>
                         </div>
                       )}

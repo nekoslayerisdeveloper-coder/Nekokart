@@ -19,16 +19,27 @@ export default function Checkout() {
   });
   const [uploading, setUploading] = useState<'home' | 'user' | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'COD' | 'Online'>('COD');
+  const [paymentScreenshot, setPaymentScreenshot] = useState('');
+  const [adminSettings, setAdminSettings] = useState({ adminQR: '', upiId: '' });
 
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const deliveryCharge = subtotal > 499 ? 0 : 40;
   const total = subtotal + deliveryCharge;
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'home' | 'user') => {
+  React.useEffect(() => {
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => setAdminSettings(data))
+      .catch(err => console.error('Failed to fetch settings', err));
+  }, []);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'home' | 'user' | 'payment') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setUploading(type);
+    if (type !== 'payment') setUploading(type);
+    else setLoading(true); // Using loading state for payment screenshot
+
     const formData = new FormData();
     formData.append('image', file);
 
@@ -40,12 +51,17 @@ export default function Checkout() {
       });
       const data = await res.json();
       if (res.ok) {
-        setShippingDetails(prev => ({ ...prev, [type === 'home' ? 'homePhoto' : 'userPhoto']: data.url }));
+        if (type === 'payment') {
+          setPaymentScreenshot(data.url);
+        } else {
+          setShippingDetails(prev => ({ ...prev, [type === 'home' ? 'homePhoto' : 'userPhoto']: data.url }));
+        }
       }
     } catch (err) {
       alert('Upload failed');
     } finally {
       setUploading(null);
+      setLoading(false);
     }
   };
 
@@ -53,6 +69,10 @@ export default function Checkout() {
     e.preventDefault();
     if (!shippingDetails.fullName || !shippingDetails.phone || !shippingDetails.address || !shippingDetails.pincode) {
       return alert('Please fill in all shipping details including Pincode');
+    }
+
+    if (paymentMethod === 'Online' && !paymentScreenshot) {
+      return alert('Please upload payment screenshot after paying via QR code');
     }
     
     setLoading(true);
@@ -67,6 +87,7 @@ export default function Checkout() {
         })),
         total,
         paymentMethod,
+        paymentScreenshot: paymentMethod === 'Online' ? paymentScreenshot : null,
         shippingDetails
       };
 
@@ -206,7 +227,7 @@ export default function Checkout() {
               <span className="bg-white text-blue-600 w-5 h-5 rounded-sm flex items-center justify-center font-bold text-xs">2</span>
               <h3 className="font-bold uppercase text-sm tracking-wider">Payment Options</h3>
            </div>
-           <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4">
               <label 
                 className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
                   paymentMethod === 'COD' ? 'border-blue-600 bg-blue-50' : 'border-gray-50 hover:border-gray-200'
@@ -233,12 +254,64 @@ export default function Checkout() {
                 <div className="flex items-center gap-3">
                   <CreditCard className="text-gray-600" size={24} />
                   <div>
-                    <p className="font-bold text-gray-900 text-sm">Online Payment</p>
-                    <p className="text-xs text-gray-500">UPI, Cards, Net Banking</p>
+                    <p className="font-bold text-gray-900 text-sm">Online Payment (UPI/QR)</p>
+                    <p className="text-xs text-gray-500">Scan QR Code & Upload Screenshot</p>
                   </div>
                 </div>
               </label>
-           </div>
+
+              <AnimatePresence>
+                {paymentMethod === 'Online' && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden bg-gray-50 rounded-xl p-6 border-2 border-dashed border-gray-200"
+                  >
+                    <div className="text-center space-y-6">
+                      <div className="space-y-2">
+                        <p className="text-xs uppercase font-bold text-gray-500 tracking-widest">Step 1: Scan & Pay Amount ₹{total.toLocaleString()}</p>
+                        <div className="bg-white p-4 rounded-2xl inline-block shadow-md border border-gray-100">
+                          {adminSettings.adminQR ? (
+                            <img src={adminSettings.adminQR} alt="Admin QR" className="w-48 h-48 mx-auto" />
+                          ) : (
+                            <div className="w-48 h-48 flex items-center justify-center bg-gray-100 rounded-lg">
+                              <p className="text-xs text-gray-400">QR Code not available</p>
+                            </div>
+                          )}
+                          <p className="mt-3 font-mono text-sm font-bold text-blue-600">{adminSettings.upiId || 'kailash@upi'}</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <p className="text-xs uppercase font-bold text-gray-500 tracking-widest">Step 2: Upload Payment Screenshot</p>
+                        <div className="relative group">
+                          <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'payment')} className="hidden" id="payment-screenshot" />
+                          <label htmlFor="payment-screenshot" className={`block w-full border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
+                            paymentScreenshot ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-blue-400'
+                          }`}>
+                            {paymentScreenshot ? (
+                              <div className="space-y-2">
+                                <CheckCircle2 size={32} className="text-green-500 mx-auto" />
+                                <p className="text-sm font-bold text-green-700">Screenshot Uploaded!</p>
+                                <img src={paymentScreenshot} className="h-20 mx-auto rounded" alt="Payment" />
+                                <span className="text-[10px] text-green-600 underline">Change Screenshot</span>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                <ShieldCheck size={32} className="text-gray-300 mx-auto group-hover:text-blue-400" />
+                                <p className="text-sm font-bold text-gray-500 group-hover:text-blue-600">Click to Upload Screenshot</p>
+                                <p className="text-[10px] text-gray-400">Must be a clear proof of payment</p>
+                              </div>
+                            )}
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
         </div>
       </div>
 
