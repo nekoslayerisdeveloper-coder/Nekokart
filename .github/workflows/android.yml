@@ -19,17 +19,11 @@ jobs:
           node-version: 18
           cache: 'npm'
 
-      - name: Diagnostic Info
-        run: |
-          node -v
-          npm -v
-          ls -R
-
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build Web App
-        run: npm run build -- --logLevel info
+        run: npm run build
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           NODE_OPTIONS: "--max-old-space-size=4096"
