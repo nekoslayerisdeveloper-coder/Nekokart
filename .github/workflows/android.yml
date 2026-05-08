@@ -41,9 +41,11 @@ jobs:
       - name: Build Android APK
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.14.3
+          gradle-version: 8.13
           build-root-directory: android
-          arguments: assembleDebug --stacktrace
+          arguments: assembleDebug --stacktrace --no-daemon
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=1g"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
